@@ -372,6 +372,7 @@ void mtr_t::start()
   ut_d(m_user_space_id= TRX_SYS_SPACE);
   m_user_space= nullptr;
   m_commit_lsn= 0;
+  m_freed_ranges= nullptr;
 }
 
 /** Release the resources */
@@ -413,6 +414,25 @@ void mtr_t::commit()
     to insert into the flush list. */
     log_mutex_exit();
 
+    fil_space_t *freed_space= m_user_space;
+    if (m_freed_ranges != nullptr)
+    {
+      /* Get the freed tablespace in case of predefined tablespace */
+      if (freed_space == NULL)
+      {
+        if (is_freed_system_tablespace_page())
+	  freed_space= fil_system.sys_space;
+      }
+
+      /* Update the last freed lsn */
+      freed_space->update_last_freed_lsn(m_commit_lsn);
+      ut_ad(mtr_memo_contains(this, &freed_space->latch,
+                              MTR_MEMO_X_LOCK));
+
+      for (ulint i= 0; i < m_freed_ranges->num_ranges(); i++)
+        freed_space->free_range(m_freed_ranges->get_range(i));
+    }
+ 
     m_memo.for_each_block_in_reverse(CIterate<const ReleaseBlocks>
                                      (ReleaseBlocks(start_lsn, m_commit_lsn)));
     if (m_made_dirty)
@@ -423,6 +443,7 @@ void mtr_t::commit()
   else
     m_memo.for_each_block_in_reverse(CIterate<ReleaseAll>());
 
+  clear_freed_ranges();
   release_resources();
 }
 

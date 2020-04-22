@@ -1097,6 +1097,9 @@ fil_space_free_low(
 
 	ut_ad(space->size == 0);
 
+	if (!space->freed_ranges)
+	  delete space->freed_ranges;
+
 	rw_lock_free(&space->latch);
 	fil_space_destroy_crypt_data(&space->crypt_data);
 
@@ -1241,6 +1244,8 @@ fil_space_create(
 		temporary tablespace files. */
 		space->atomic_write_supported = true;
 	}
+
+	space->freed_ranges= nullptr;
 
 	HASH_INSERT(fil_space_t, hash, fil_system.spaces, id, space);
 

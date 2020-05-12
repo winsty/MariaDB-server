@@ -582,7 +582,7 @@ public:
 
   /** Add freed page numbers to freed_pages */
   void add_freed_offset(page_id_t id)
-  { 
+  {
     if (!m_freed_ranges)
       m_freed_ranges= new range_set<uint32_t>();
 

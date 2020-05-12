@@ -1097,9 +1097,10 @@ fil_space_free_low(
 
 	ut_ad(space->size == 0);
 
-	if (!space->freed_ranges)
-	  delete space->freed_ranges;
+	if (space->freed_ranges)
+          delete space->freed_ranges;
 
+	space->freed_range_mutex().~mutex();
 	rw_lock_free(&space->latch);
 	fil_space_destroy_crypt_data(&space->crypt_data);
 
@@ -1246,6 +1247,8 @@ fil_space_create(
 	}
 
 	space->freed_ranges= nullptr;
+
+	new (&space->frange_mutex_bytes) std::mutex;
 
 	HASH_INSERT(fil_space_t, hash, fil_system.spaces, id, space);
 

@@ -51,6 +51,7 @@ Created 10/10/1995 Heikki Tuuri
 
 #include "mysql/psi/mysql_stage.h"
 #include "mysql/psi/psi.h"
+#include "distributable_counter.h"
 #include <tpool.h>
 #include <memory>
 
@@ -153,7 +154,7 @@ struct srv_stats_t
 				n_lock_wait_current_count;
 
 	/** Number of rows read. */
-	ulint_ctr_64_t		n_rows_read;
+	TLS_DISTRIBUTED_COUNTER(uint64_t)		n_rows_read;
 
 	/** Number of rows updated */
 	ulint_ctr_64_t		n_rows_updated;
@@ -165,7 +166,7 @@ struct srv_stats_t
 	ulint_ctr_64_t		n_rows_inserted;
 
 	/** Number of system rows read. */
-	ulint_ctr_64_t		n_system_rows_read;
+	TLS_DISTRIBUTED_COUNTER(uint64_t)		n_system_rows_read;
 
 	/** Number of system rows updated */
 	ulint_ctr_64_t		n_system_rows_updated;

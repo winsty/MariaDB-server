@@ -1852,7 +1852,7 @@ srv_mon_process_existing_counter(
 
 	/* innodb_rows_read */
 	case MONITOR_OLVD_ROW_READ:
-		value = srv_stats.n_rows_read;
+		value = srv_stats.n_rows_read.load();
 		break;
 
 	/* innodb_rows_inserted */
@@ -1872,7 +1872,7 @@ srv_mon_process_existing_counter(
 
 	/* innodb_system_rows_read */
 	case MONITOR_OLVD_SYSTEM_ROW_READ:
-		value = srv_stats.n_system_rows_read;
+		value = srv_stats.n_system_rows_read.load();
 		break;
 
 	/* innodb_system_rows_inserted */

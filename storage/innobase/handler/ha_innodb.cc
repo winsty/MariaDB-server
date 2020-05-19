@@ -8975,11 +8975,9 @@ ha_innobase::index_read(
 		error = 0;
 		table->status = 0;
 		if (m_prebuilt->table->is_system_db) {
-			srv_stats.n_system_rows_read.add(
-				thd_get_thread_id(m_prebuilt->trx->mysql_thd), 1);
+			srv_stats.n_system_rows_read++;
 		} else {
-			srv_stats.n_rows_read.add(
-				thd_get_thread_id(m_prebuilt->trx->mysql_thd), 1);
+			srv_stats.n_rows_read++;
 		}
 		break;
 
@@ -9234,11 +9232,9 @@ ha_innobase::general_fetch(
 		error = 0;
 		table->status = 0;
 		if (m_prebuilt->table->is_system_db) {
-			srv_stats.n_system_rows_read.add(
-				thd_get_thread_id(trx->mysql_thd), 1);
+			srv_stats.n_system_rows_read++;
 		} else {
-			srv_stats.n_rows_read.add(
-				thd_get_thread_id(trx->mysql_thd), 1);
+			srv_stats.n_rows_read++;
 		}
 		break;
 	case DB_RECORD_NOT_FOUND:

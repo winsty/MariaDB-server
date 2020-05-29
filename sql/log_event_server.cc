@@ -5570,6 +5570,12 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
   {
     master_had_triggers= table->master_had_triggers;
     bool transactional_table= table->file->has_transactions_and_rollback();
+    if (get_general_type_code() == WRITE_ROWS_EVENT)
+      table->file->prepare_for_insert(0);
+    else if (get_general_type_code() == UPDATE_ROWS_EVENT ||
+             get_general_type_code() == DELETE_ROWS_EVENT)
+      table->file->prepare_for_insert(1);
+
     /*
       table == NULL means that this table should not be replicated
       (this was set up by Table_map_log_event::do_apply_event()

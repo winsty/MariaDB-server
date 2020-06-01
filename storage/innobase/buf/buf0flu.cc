@@ -1409,9 +1409,8 @@ static void buf_flush_freed_pages(fil_space_t *space,
 #endif
     false;
 
-  for (ulint i = 0; i < freed_ranges.num_ranges(); i++)
+  for (const auto &range : freed_ranges)
   {
-    const range_t<uint32_t>& range= freed_ranges.get_range(i);
     ulint page_size= space->zip_size();
     if (!page_size)
       page_size= srv_page_size;

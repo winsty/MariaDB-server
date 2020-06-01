@@ -236,14 +236,8 @@ new_range:
 
   bool empty() const { return ranges.empty(); }
 
-  /* Number of ranges */
-  ulint num_ranges() { return ranges.size(); }
-
-  /* Get the nth range from range_set */
-  const range_t<T>& get_range(ulint i)
-  {
-    return *std::next(ranges.begin(), i);
-  }
+  typename range_set_t<T>::iterator begin() { return ranges.begin(); }
+  typename range_set_t<T>::iterator end() { return ranges.end(); }
 };
 
 #endif

@@ -429,10 +429,10 @@ void mtr_t::commit()
       ut_ad(mtr_memo_contains(this, &freed_space->latch,
                               MTR_MEMO_X_LOCK));
 
-      for (ulint i= 0; i < m_freed_ranges->num_ranges(); i++)
-        freed_space->free_range(m_freed_ranges->get_range(i));
+      for (const auto& range : *m_freed_ranges)
+        freed_space->free_range(range);
     }
- 
+
     m_memo.for_each_block_in_reverse(CIterate<const ReleaseBlocks>
                                      (ReleaseBlocks(start_lsn, m_commit_lsn)));
     if (m_made_dirty)

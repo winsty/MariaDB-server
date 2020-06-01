@@ -1386,10 +1386,10 @@ static range_set<uint32_t>* buf_flush_get_freed_pages(fil_space_t *space)
 {
   ut_ad(space != NULL);
   if (!srv_immediate_scrub_data_uncompressed && !space->is_compressed())
-    return nullptr; 
+    return nullptr;
 
   lsn_t flush_to_disk_lsn= log_sys.get_flushed_lsn();
-  std::lock_guard<std::mutex> freed_lock(space->freed_range_mutex());
+  std::lock_guard<std::mutex> freed_lock(space->freed_range_mutex);
   if (!space->freed_ranges
       || flush_to_disk_lsn < space->get_last_freed_lsn())
     return nullptr;

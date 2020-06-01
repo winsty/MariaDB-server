@@ -338,8 +338,8 @@ struct fil_space_t
 	punch hole */
 	bool		punch_hole;
 
-	/** mutex to protect freed ranges */ 
-	std::aligned_storage<sizeof(std::mutex)>::type frange_mutex_bytes;
+	/** mutex to protect freed ranges */
+	std::mutex freed_range_mutex;
 
 	/** Variables to store freed ranges. This can be used to write
 	zeroes/punch the hole in files. Protected by freed_mutex */
@@ -446,7 +446,7 @@ struct fil_space_t
 	/** Update last_freed_lsn */
 	void update_last_freed_lsn(lsn_t lsn)
 	{
-          std::lock_guard<std::mutex> freed_lock(freed_range_mutex());
+          std::lock_guard<std::mutex> freed_lock(freed_range_mutex);
           last_freed_lsn= lsn;
 	}
 #endif /* !UNIV_INNOCHECKSUM */
@@ -720,18 +720,12 @@ struct fil_space_t
 	}
 
 #ifndef UNIV_INNOCHECKSUM
-  /** Getter for freed_mutex */
-  std::mutex& freed_range_mutex()
-  {
-    return *static_cast<std::mutex*>(static_cast<void*>(&frange_mutex_bytes));
-  }
-
   /** Add/remove the free page in the freed ranges list.
   @param[in] offset     page number to be added
   @param[in] free       true if page to be freed */
   void free_page(uint32_t offset, bool add=true)
   {
-    std::lock_guard<std::mutex>	freed_lock(freed_range_mutex());
+    std::lock_guard<std::mutex>	freed_lock(freed_range_mutex);
     if (!freed_ranges)
     {
       if (!add)
@@ -748,14 +742,14 @@ struct fil_space_t
   /** Add the range of freed pages */
   void free_ranges(const range_set<uint32_t> *ranges)
   {
-    std::lock_guard<std::mutex>	freed_lock(freed_range_mutex());
+    std::lock_guard<std::mutex>	freed_lock(freed_range_mutex);
     freed_ranges= new range_set<uint32_t>(*ranges);
   }
 
   /** Add the set of freed page ranges */
   void free_range(const range_t<uint32_t>& range)
   {
-    std::lock_guard<std::mutex> freed_lock(freed_range_mutex());
+    std::lock_guard<std::mutex> freed_lock(freed_range_mutex);
     if (!freed_ranges)
       freed_ranges= new range_set<uint32_t>();
     freed_ranges->add_range(range);

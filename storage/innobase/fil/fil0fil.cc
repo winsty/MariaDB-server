@@ -1100,12 +1100,13 @@ fil_space_free_low(
 	if (space->freed_ranges)
           delete space->freed_ranges;
 
-	space->freed_range_mutex().~mutex();
 	rw_lock_free(&space->latch);
 	fil_space_destroy_crypt_data(&space->crypt_data);
 
 	ut_free(space->name);
 	ut_free(space);
+
+	space->~fil_space_t();
 }
 
 /** Frees a space object from the tablespace memory cache.
@@ -1196,7 +1197,7 @@ fil_space_create(
 		return(NULL);
 	}
 
-	space = static_cast<fil_space_t*>(ut_zalloc_nokey(sizeof(*space)));
+	space = new (ut_zalloc_nokey(sizeof(*space))) fil_space_t;
 
 	space->id = id;
 	space->name = mem_strdup(name);
@@ -1247,8 +1248,6 @@ fil_space_create(
 	}
 
 	space->freed_ranges= nullptr;
-
-	new (&space->frange_mutex_bytes) std::mutex;
 
 	HASH_INSERT(fil_space_t, hash, fil_system.spaces, id, space);
 

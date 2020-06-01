@@ -1382,21 +1382,18 @@ buf_flush_check_neighbor(
 local freed range variable. This function protected by freed_mutex
 @param[in,out]	space		tablespace which contains freed ranges
 @param[in,out]	freed_ranges	freed ranges of tablespace pages */
-static range_set<uint32_t>* buf_flush_get_freed_pages(fil_space_t *space)
+static range_set<uint32_t> buf_flush_get_freed_pages(fil_space_t *space)
 {
   ut_ad(space != NULL);
   if (!srv_immediate_scrub_data_uncompressed && !space->is_compressed())
-    return nullptr;
+    return {};
 
   lsn_t flush_to_disk_lsn= log_sys.get_flushed_lsn();
-  std::lock_guard<std::mutex> freed_lock(space->freed_range_mutex);
-  if (!space->freed_ranges
-      || flush_to_disk_lsn < space->get_last_freed_lsn())
-    return nullptr;
+  if (flush_to_disk_lsn < space->get_last_freed_lsn())
+    return {};
 
-  range_set<uint32_t> *freed_ranges= space->freed_ranges;
-  space->freed_ranges= nullptr;
-  return freed_ranges;
+  std::lock_guard<std::mutex> freed_lock(space->freed_range_mutex);
+  return std::move(space->freed_ranges);
 }
 
 /** Write punch-hole or zeroes of the freed ranges when
@@ -1404,7 +1401,7 @@ innodb_immediate_scrub_data_uncompressed from the freed ranges.
 @param[in]	space		tablespace which contains freed ranges
 @param[in]	freed_ranges	freed ranges of the page to be flushed */
 static void buf_flush_freed_pages(fil_space_t *space,
-				  range_set<uint32_t> *freed_ranges)
+				  range_set<uint32_t> freed_ranges)
 {
   const bool punch_hole=
 #if defined(HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE) || defined(_WIN32)
@@ -1412,9 +1409,9 @@ static void buf_flush_freed_pages(fil_space_t *space,
 #endif
     false;
 
-  for (ulint i = 0; i < freed_ranges->num_ranges(); i++)
+  for (ulint i = 0; i < freed_ranges.num_ranges(); i++)
   {
-    const range_t<uint32_t>& range= freed_ranges->get_range(i);
+    const range_t<uint32_t>& range= freed_ranges.get_range(i);
     ulint page_size= space->zip_size();
     if (!page_size)
       page_size= srv_page_size;
@@ -1426,8 +1423,6 @@ static void buf_flush_freed_pages(fil_space_t *space,
              0, len, const_cast<byte*>(field_ref_zero),
              nullptr, false, punch_hole);
   }
-
-  delete freed_ranges;
 }
 
 /** Flushes to disk all flushable pages within the flush area
@@ -1458,15 +1453,8 @@ buf_flush_try_neighbors(
 
 	if (flush_type == BUF_FLUSH_LIST)
 	{
-	  /* Get the freed pages from fil_space_t */
-	  range_set<uint32_t> *space_freed_ranges=
-             buf_flush_get_freed_pages(space);
-
-	  if (space_freed_ranges)
-	  {
-            /* Flush the freed ranges while flushing the neighbors */
-            buf_flush_freed_pages(space, space_freed_ranges);
-	  }
+          /* Flush the freed ranges while flushing the neighbors */
+	  buf_flush_freed_pages(space, buf_flush_get_freed_pages(space));
 	}
 
 	if (UT_LIST_GET_LEN(buf_pool.LRU) < BUF_LRU_OLD_MIN_LEN

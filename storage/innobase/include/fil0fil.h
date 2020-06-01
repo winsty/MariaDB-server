@@ -100,8 +100,6 @@ private:
   range_set_t<T> ranges;
 
 public:
-  range_set() {}
-  range_set(range_set_t<T>& range_v):ranges(std::move(range_v.ranges)) {}
   /** Merge the current range with previous range.
   @param[in] range	range to be merged
   @param[in] prev_range	range to be merged with next */
@@ -119,8 +117,8 @@ public:
   @param[in] value	Value to be removed from range */
   void split_range(const range_t<T>& range, T value)
   {
-    T& split1_start_val= range.first();
-    T& split2_end_val= range.last();
+    T split1_start_val= range.first();
+    T split2_end_val= range.last();
 
     /* Remove the existing element */
     ranges.erase(range);
@@ -170,7 +168,7 @@ public:
       /* Iterate the previous ranges to delete */
       auto prev_last= std::prev(range);
       T& prev_last_end= prev_last->last();
-      
+
       if (prev_last_end == value)
         prev_last_end--;
       else if (prev_last_end > value)
@@ -235,6 +233,8 @@ new_range:
     range_t<T> new_range(value);
     add_range(new_range);
   }
+
+  bool empty() const { return ranges.empty(); }
 
   /* Number of ranges */
   ulint num_ranges() { return ranges.size(); }
@@ -343,7 +343,7 @@ struct fil_space_t
 
 	/** Variables to store freed ranges. This can be used to write
 	zeroes/punch the hole in files. Protected by freed_mutex */
-	range_set<uint32_t>	*freed_ranges;
+	range_set<uint32_t>	freed_ranges;
 
 	/** Stores last page freed lsn. Protected by freed_mutex */
 	lsn_t		last_freed_lsn;
@@ -726,33 +726,25 @@ struct fil_space_t
   void free_page(uint32_t offset, bool add=true)
   {
     std::lock_guard<std::mutex>	freed_lock(freed_range_mutex);
-    if (!freed_ranges)
-    {
-      if (!add)
-	return;
-      freed_ranges= new range_set<uint32_t>();
-    }
 
     if (add)
-      return freed_ranges->add_value(offset);
-
-    return freed_ranges->remove_value(offset);
+      freed_ranges.add_value(offset);
+    else
+      freed_ranges.remove_value(offset);
   }
 
   /** Add the range of freed pages */
-  void free_ranges(const range_set<uint32_t> *ranges)
+  void free_ranges(range_set<uint32_t> ranges)
   {
     std::lock_guard<std::mutex>	freed_lock(freed_range_mutex);
-    freed_ranges= new range_set<uint32_t>(*ranges);
+    freed_ranges= std::move(ranges);
   }
 
   /** Add the set of freed page ranges */
   void free_range(const range_t<uint32_t>& range)
   {
     std::lock_guard<std::mutex> freed_lock(freed_range_mutex);
-    if (!freed_ranges)
-      freed_ranges= new range_set<uint32_t>();
-    freed_ranges->add_range(range);
+    freed_ranges.add_range(range);
   }
 #endif /*!UNIV_INNOCHECKSUM */
 

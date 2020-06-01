@@ -544,26 +544,24 @@ struct file_name_t {
 	ulint		size;
 
 	/** Freed pages of tablespace */
-	range_set<uint32_t> *freed_ranges;
+	range_set<uint32_t> freed_ranges;
 
 	/** Constructor */
 	file_name_t(std::string name_, bool deleted)
 		: name(std::move(name_)), space(NULL),
 		status(deleted ? DELETED: NORMAL),
-		size(0), freed_ranges(nullptr) {}
+		size(0) {}
 
 	/** Add the freed pages */
 	void add_freed_page(uint32_t page_no)
 	{
-          if (!freed_ranges) { freed_ranges= new range_set<uint32_t>(); }
-	  freed_ranges->add_value(page_no);
+	  freed_ranges.add_value(page_no);
 	}
 
 	/** Remove the freed pages */
 	void remove_freed_page(uint32_t page_no)
 	{
-	  if (!freed_ranges) return;
-	  freed_ranges->remove_value(page_no);
+	  freed_ranges.remove_value(page_no);
 	}
 };
 
@@ -3289,13 +3287,10 @@ recv_init_crash_recovery_spaces(bool rescan, bool& missing_tablespace)
 
 			/* Add the freed page ranges in the respective
 			tablespace */
-			if (range_set<uint32_t> *freed_ranges
-                                = rs.second.freed_ranges)
+			if (!rs.second.freed_ranges.empty())
 			{
-			  fil_space_t *freed_space= rs.second.space;
-			  freed_space->free_ranges(freed_ranges);
-			  delete rs.second.freed_ranges;
-			  rs.second.freed_ranges= nullptr;
+				rs.second.space->free_ranges(
+					std::move(rs.second.freed_ranges));
 			}
 		} else if (rs.second.name == "") {
 			ib::error() << "Missing FILE_CREATE, FILE_DELETE"

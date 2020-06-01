@@ -3293,13 +3293,7 @@ recv_init_crash_recovery_spaces(bool rescan, bool& missing_tablespace)
                                 = rs.second.freed_ranges)
 			{
 			  fil_space_t *freed_space= rs.second.space;
-			  for (ulint i = 0;
-			       i < freed_ranges->num_ranges(); i++)
-			  {
-			    freed_space->free_range(
-                               freed_ranges->get_range(i));
-			  }
-			  freed_ranges->clean_ranges();
+			  freed_space->free_ranges(freed_ranges);
 			  delete rs.second.freed_ranges;
 			  rs.second.freed_ranges= nullptr;
 			}

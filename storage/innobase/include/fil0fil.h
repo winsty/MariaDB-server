@@ -65,28 +65,21 @@ struct fil_node_t;
 
 /** Structure to store ranges. */
 template
-<typename T=uint32_t>
+<typename T>
 class range_t
 {
 private:
-  mutable T first_val;
-  mutable T last_val;
+  mutable std::pair<T, T> r_values;
 public:
-  range_t() : first_val(0), last_val(0) {}
-  range_t (T st_val) { first_val = last_val = st_val; }
-  range_t (T st_val,
-           T end_val) : first_val (st_val),last_val(end_val) {}
-  range_t(const range_t<T>& o) : first_val(o.first_val), last_val(o.last_val)
-  {}
-  range_t(range_t<T>&& o) : first_val(std::move(o.first_val)),
-                            last_val(std::move(o.last_val)) {}
-  uint32_t& last() const { return last_val; }
-  void set_last(uint32_t val) const { last_val = val; }
-  void set_first(uint32_t val) const { first_val = val; }
-  uint32_t& first() const { return first_val; }
+  range_t (T st_val) { r_values= std::make_pair(st_val, st_val); }
+  range_t (T st_val, T end_val) { r_values= std::make_pair(st_val, end_val); }
+  uint32_t& last() const { return r_values.second; }
+  void set_last(uint32_t val) const { r_values.second= val; }
+  void set_first(uint32_t val) const { r_values.first= val; }
+  uint32_t& first() const { return r_values.first; }
 };
 
-template <typename T=uint32_t>
+template <typename T>
 struct range_compare
 {
   bool operator() (const range_t<T>& lhs, const range_t<T>& rhs) const
@@ -96,18 +89,19 @@ struct range_compare
 };
 
 template<typename T>
-using range_set_t = std::set<range_t<T>, range_compare<T>>;
+using range_set_t= std::set<range_t<T>, range_compare<T>>;
 
-template<typename T=uint32_t>
+/* Structure to store ranges of integer in a set */
+template<typename T>
 class range_set
 {
 private:
   /** Variables to store ranges. */
-  range_set_t<T>* ranges;
+  range_set_t<T> ranges;
 
 public:
-  range_set<T>() { ranges= new range_set_t<T>(); }
-  ~range_set<T>() { delete ranges; }
+  range_set() {}
+  range_set(range_set_t<T>& range_v):ranges(std::move(range_v.ranges)) {}
   /** Merge the current range with previous range.
   @param[in] range	range to be merged
   @param[in] prev_range	range to be merged with next */
@@ -118,27 +112,28 @@ public:
 
     /* Merge the current range with previous range */
     prev_range.set_last(range.last());
-
-    ranges->erase(range);
+    ranges.erase(range);
   }
   /** Split the range and add two more ranges
   @param[in] range	range to be split
   @param[in] value	Value to be removed from range */
   void split_range(const range_t<T>& range, T value)
   {
-    T& split1_start_val = range.first();
-    T& split2_end_val = range.last();
+    T& split1_start_val= range.first();
+    T& split2_end_val= range.last();
 
     /* Remove the existing element */
-    ranges->erase(range);
+    ranges.erase(range);
     range_t<T> split1(split1_start_val, value - 1);
     range_t<T> split2(value + 1, split2_end_val);
 
     /* Insert the two elements */
-    ranges->insert(split1);
-    ranges->insert(split2);
+    ranges.emplace(split1);
+    ranges.emplace(split2);
   }
-
+  /** Remove the value with the given range
+  @param[in,out] range  range to be changed
+  @param[in]	 value	value to be removed */
   void remove_within_range(const range_t<T>& range, T value)
   {
     T& start_val= range.first();
@@ -146,7 +141,7 @@ public:
     if (value == start_val)
     {
       if (start_val == end_val)
-        ranges->erase(range);
+        ranges.erase(range);
       else start_val++;
     }
     else if (value == end_val)
@@ -154,83 +149,83 @@ public:
     else if (start_val < value && end_val > value)
       split_range(range, value);
   }
-
   /** Remove the value from the ranges.
   @param[in]	value	Value to be removed. */
   void remove_value(T value)
   {
-    if (!ranges || ranges->empty())
+    if (ranges.empty())
       return;
 
     range_t<T> new_range(value);
-    auto range= ranges->lower_bound(new_range);
-    if (range == ranges->end())
+    auto range= ranges.lower_bound(new_range);
+    if (range == ranges.end())
     {
       /* Element could be in first range */
-      range= ranges->begin();
+      range= ranges.begin();
       return remove_within_range(*range, value);
     }
 
-    if ((*range).first() > value && range != ranges->begin())
+    if (range->first() > value && range != ranges.begin())
     {
       /* Iterate the previous ranges to delete */
-      auto prev_last= std::prev(range, 1);
-      T& prev_last_end= (*prev_last).last();
+      auto prev_last= std::prev(range);
+      T& prev_last_end= prev_last->last();
       
       if (prev_last_end == value)
         prev_last_end--;
       else if (prev_last_end > value)
-       split_range(*prev_last, value);
+        split_range(*prev_last, value);
    }
    else remove_within_range(*range, value);
  }
+ /** Add the range in the ranges set
+ @param[in]	new_range	range to be added */
+ void add_range(const range_t<T>& new_range)
+ {
+   auto r_offset= ranges.lower_bound(new_range);
+   auto rlast= ranges.rbegin();
+   auto rend= ranges.rend();
+   T f_value= new_range.first();
 
-  void add_range(const range_t<T>& new_range)
-  {
-    auto r_offset= ranges->lower_bound(new_range);
-    auto rlast= ranges->rbegin();
-    auto rend= ranges->rend();
-    T f_value= new_range.first();
-
-    if (rlast == rend)
-    {
+   if (rlast == rend)
+   {
 new_range:
-      ranges->insert(new_range);
-      return;
-    }
+     ranges.emplace(new_range);
+     return;
+   }
 
-    if (r_offset == ranges->end() && rlast != rend)
-    {
-      /* First range */
-      T& last_end_val = (*rlast).last();
-      if (last_end_val + 1 < f_value)
-        goto new_range;
-      else if (last_end_val + 1 == f_value)
-        last_end_val++;
-      return;
-    }
+   if (r_offset == ranges.end() && rlast != rend)
+   {
+     /* First range */
+     T& last_end_val= rlast->last();
+     if (last_end_val + 1 < f_value)
+       goto new_range;
+     else if (last_end_val + 1 == f_value)
+       last_end_val++;
+     return;
+   }
 
-    T& start_val= (*r_offset).first();
-    /* Change starting of the existing range */
-    if (start_val - 1 == f_value)
-    {
-      start_val--;
-      if (r_offset != ranges->begin())
-      {
-        auto r_prev= std::prev(r_offset, 1);
-	merge_range(*r_offset, *r_prev);
-      }
-    }
-    else
-    {
-      /* previous range last_value alone */
-      auto prev_last = std::prev(r_offset, 1);
-      T& last_val = (*prev_last).last();
-      if (last_val + 1 == f_value)
-        last_val++;
-      else
-        goto new_range;
-    }
+   T& start_val= r_offset->first();
+   /* Change starting of the existing range */
+   if (start_val - 1 == f_value)
+   {
+     start_val--;
+     if (r_offset != ranges.begin())
+     {
+       auto r_prev= std::prev(r_offset);
+       merge_range(*r_offset, *r_prev);
+     }
+   }
+   else
+   {
+     /* previous range last_value alone */
+     auto prev_last= std::prev(r_offset);
+     T& last_val= prev_last->last();
+     if (last_val + 1 == f_value)
+       last_val++;
+     else
+       goto new_range;
+   }
   }
 
   /** Add the value in the ranges
@@ -242,19 +237,13 @@ new_range:
   }
 
   /* Number of ranges */
-  ulint num_ranges()
-  {
-    return ranges->size();
-  }
+  ulint num_ranges() { return ranges.size(); }
 
   /* Get the nth range from range_set */
   const range_t<T>& get_range(ulint i)
   {
-    return *std::next(ranges->begin(), i);
+    return *std::next(ranges.begin(), i);
   }
-
-  /* Clean the range value */
-  void clean_ranges() { delete ranges; ranges= nullptr;}
 };
 
 #endif
@@ -352,11 +341,11 @@ struct fil_space_t
 	/** mutex to protect freed ranges */ 
 	std::aligned_storage<sizeof(std::mutex)>::type frange_mutex_bytes;
 
-	/** Variables to store freed ranges. This can be used
-	to write zeroes/punch the hole in files */
+	/** Variables to store freed ranges. This can be used to write
+	zeroes/punch the hole in files. Protected by freed_mutex */
 	range_set<uint32_t>	*freed_ranges;
 
-	/** Stores last page freed lsn */
+	/** Stores last page freed lsn. Protected by freed_mutex */
 	lsn_t		last_freed_lsn;
 
 	ulint		magic_n;/*!< FIL_SPACE_MAGIC_N */
@@ -731,7 +720,9 @@ struct fil_space_t
 	}
 
 #ifndef UNIV_INNOCHECKSUM
-  std::mutex& freed_range_mutex() {
+  /** Getter for freed_mutex */
+  std::mutex& freed_range_mutex()
+  {
     return *static_cast<std::mutex*>(static_cast<void*>(&frange_mutex_bytes));
   }
 
@@ -744,7 +735,7 @@ struct fil_space_t
     if (!freed_ranges)
     {
       if (!add)
-        return;
+	return;
       freed_ranges= new range_set<uint32_t>();
     }
 
@@ -754,9 +745,17 @@ struct fil_space_t
     return freed_ranges->remove_value(offset);
   }
 
-  void free_range(const range_t<uint32_t>& range)
+  /** Add the range of freed pages */
+  void free_ranges(const range_set<uint32_t> *ranges)
   {
     std::lock_guard<std::mutex>	freed_lock(freed_range_mutex());
+    freed_ranges= new range_set<uint32_t>(*ranges);
+  }
+
+  /** Add the set of freed page ranges */
+  void free_range(const range_t<uint32_t>& range)
+  {
+    std::lock_guard<std::mutex> freed_lock(freed_range_mutex());
     if (!freed_ranges)
       freed_ranges= new range_set<uint32_t>();
     freed_ranges->add_range(range);

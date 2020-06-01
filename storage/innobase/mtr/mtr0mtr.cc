@@ -372,7 +372,6 @@ void mtr_t::start()
   ut_d(m_user_space_id= TRX_SYS_SPACE);
   m_user_space= nullptr;
   m_commit_lsn= 0;
-  m_freed_ranges= nullptr;
 }
 
 /** Release the resources */
@@ -415,7 +414,7 @@ void mtr_t::commit()
     log_mutex_exit();
 
     fil_space_t *freed_space= m_user_space;
-    if (m_freed_ranges != nullptr)
+    if (!m_freed_ranges.empty())
     {
       /* Get the freed tablespace in case of predefined tablespace */
       if (freed_space == NULL)
@@ -429,7 +428,7 @@ void mtr_t::commit()
       ut_ad(mtr_memo_contains(this, &freed_space->latch,
                               MTR_MEMO_X_LOCK));
 
-      for (const auto& range : *m_freed_ranges)
+      for (const auto& range : m_freed_ranges)
         freed_space->free_range(range);
     }
 

@@ -234,6 +234,8 @@ new_range:
     add_range(new_range);
   }
 
+  void clear() { ranges.clear(); }
+
   bool empty() const { return ranges.empty(); }
 
   typename range_set_t<T>::iterator begin() { return ranges.begin(); }

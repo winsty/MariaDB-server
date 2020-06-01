@@ -583,20 +583,14 @@ public:
   /** Add freed page numbers to freed_pages */
   void add_freed_offset(page_id_t id)
   {
-    if (!m_freed_ranges)
-      m_freed_ranges= new range_set<uint32_t>();
-
     ut_ad(m_user_space == NULL || id.space() == m_user_space->id);
-    m_freed_ranges->add_value(id.page_no());
+    m_freed_ranges.add_value(id.page_no());
   }
 
   /** Clear the freed pages */
   void clear_freed_ranges()
   {
-    if (!m_freed_ranges)
-      return;
-    delete m_freed_ranges;
-    m_freed_ranges= nullptr;
+    m_freed_ranges.clear();
   }
 private:
   /** Log a write of a byte string to a page.
@@ -690,7 +684,7 @@ private:
   lsn_t m_commit_lsn;
 
   /** set of freed page ids */
-  range_set<uint32_t> *m_freed_ranges;
+  range_set<uint32_t> m_freed_ranges;
 };
 
 #include "mtr0mtr.ic"

@@ -94,10 +94,11 @@ then
   sed -i -e "/Package: libmariadbd-dev/,/^$/d" debian/control
 fi
 
-# Don't package ColumnStore if it wasn't turned on to build
-if [[ $CMAKEFLAGS != *"COLUMNSTORE=YES"* ]]
+if [[ $TRAVIS ]] || ! [[ $(arch) =~ 86 ]]
 then
-    sed -i -e "/Package: mariadb-plugin-columnstore/,/^$/d" debian/control
+  sed -i -e "/Package: mariadb-plugin-columnstore/,/^$/d" debian/control
+  sed -i '/flex/d' debian/control
+  sed -i 's|-DPLUGIN_COLUMNSTORE=YES|-DPLUGIN_COLUMNSTORE=NO|' debian/rules
 fi
 
 # Adjust changelog, add new version

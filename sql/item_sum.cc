@@ -3520,7 +3520,7 @@ String *Item_sum_udf_str::val_str(String *str)
 */
 
 extern "C"
-int group_concat_key_cmp_with_distinct(void* arg, const void* key1, 
+int group_concat_key_cmp_with_distinct(void* arg, const void* key1,
                                        const void* key2)
 {
   Item_func_group_concat *item_func= (Item_func_group_concat*)arg;
@@ -3547,6 +3547,62 @@ int group_concat_key_cmp_with_distinct(void* arg, const void* key1,
     uint offset= (field->offset(field->table->record[0]) -
                   field->table->s->null_bytes);
     int res= field->cmp((uchar*)key1 + offset, (uchar*)key2 + offset);
+    if (res)
+      return res;
+  }
+  return 0;
+}
+
+
+/*
+  @brief
+    Comparator function for DISTINCT clause taking into account NULL values.
+
+  @note
+    Used for JSON_ARRAYAGG function
+*/
+
+int group_concat_key_cmp_with_distinct_with_nulls(void* arg,
+                                                  const void* key1_arg,
+                                                  const void* key2_arg)
+{
+  Item_func_group_concat *item_func= (Item_func_group_concat*)arg;
+
+  uchar *key1= (uchar*)key1_arg + item_func->table->s->null_bytes;
+  uchar *key2= (uchar*)key2_arg + item_func->table->s->null_bytes;
+
+  for (uint i= 0; i < item_func->arg_count_field; i++)
+  {
+    Item *item= item_func->args[i];
+    /*
+      If item is a const item then either get_tmp_table_field returns 0
+      or it is an item over a const table.
+    */
+    if (item->const_item())
+      continue;
+    /*
+      We have to use get_tmp_table_field() instead of
+      real_item()->get_tmp_table_field() because we want the field in
+      the temporary table, not the original field
+    */
+    Field *field= item->get_tmp_table_field();
+
+    if (!field)
+      continue;
+
+    if (field->is_null_in_record((uchar*)key1_arg) &&
+        field->is_null_in_record((uchar*)key2_arg))
+      continue;
+
+    if (field->is_null_in_record((uchar*)key1_arg))
+      return -1;
+
+    if (field->is_null_in_record((uchar*)key2_arg))
+      return 1;
+
+    uint offset= (field->offset(field->table->record[0]) -
+                  field->table->s->null_bytes);
+    int res= field->cmp(key1 + offset, key2 + offset);
     if (res)
       return res;
   }
@@ -3672,7 +3728,8 @@ int dump_leaf_key(void* key_arg, element_count count __attribute__((unused)),
         uint offset= (field->offset(field->table->record[0]) -
                       table->s->null_bytes);
         DBUG_ASSERT(offset < table->s->reclength);
-        res= item->get_str_from_field(*arg, field, &tmp, key, offset);
+        res= item->get_str_from_field(*arg, field, &tmp, key,
+                                      offset + item->get_null_bytes());
       }
       else
         res= item->get_str_from_item(*arg, &tmp);
@@ -4012,6 +4069,14 @@ bool Item_func_group_concat::add(bool exclude_nulls)
       if (tree && (res= field->val_str(&buf)))
         row_str_len+= res->length();
     }
+    else
+    {
+      /*
+        should not reach here, we create temp table for all the arguments of
+        the group_concat function
+      */
+      DBUG_ASSERT(0);
+    }
   }
 
   null_value= FALSE;
@@ -4021,7 +4086,7 @@ bool Item_func_group_concat::add(bool exclude_nulls)
   {
     /* Filter out duplicate rows. */
     uint count= unique_filter->elements_in_tree();
-    unique_filter->unique_add(table->record[0] + table->s->null_bytes);
+    unique_filter->unique_add(get_record_pointer());
     if (count == unique_filter->elements_in_tree())
       row_eligible= FALSE;
   }
@@ -4047,7 +4112,7 @@ bool Item_func_group_concat::add(bool exclude_nulls)
     row to the output buffer here. That will be done in val_str.
   */
   if (row_eligible && !warning_for_row && (!tree && !distinct))
-    dump_leaf_key(table->record[0] + table->s->null_bytes, 1, this);
+    dump_leaf_key(get_record_pointer(), 1, this);
 
   return 0;
 }
@@ -4247,9 +4312,9 @@ bool Item_func_group_concat::setup(THD *thd)
   }
 
   if (distinct)
-    unique_filter= new Unique(group_concat_key_cmp_with_distinct,
+    unique_filter= new Unique(get_comparator_function_for_distinct(),
                               (void*)this,
-                              tree_key_length,
+                              tree_key_length + get_null_bytes(),
                               ram_limitation(thd));
   if ((row_limit && row_limit->cmp_type() != INT_RESULT) ||
       (offset_limit && offset_limit->cmp_type() != INT_RESULT))
@@ -4302,6 +4367,53 @@ String* Item_func_group_concat::val_str(String* str)
   }
 
   return &result;
+}
+
+
+/*
+  @brief
+    Get the comparator function for DISTINT clause
+*/
+
+qsort_cmp2 Item_func_group_concat::get_comparator_function_for_distinct()
+{
+  return skip_nulls() ?
+         group_concat_key_cmp_with_distinct :
+         group_concat_key_cmp_with_distinct_with_nulls;
+}
+
+
+/*
+
+  @brief
+    Get the record pointer of the current row of the table
+
+  @details
+    look at the comments for Item_func_group_concat::get_null_bytes
+*/
+
+uchar* Item_func_group_concat::get_record_pointer()
+{
+  return skip_nulls() ?
+         table->record[0] + table->s->null_bytes :
+         table->record[0];
+}
+
+
+/*
+  @brief
+    Get the null bytes for the table if required.
+
+  @details
+    This function is used for GROUP_CONCAT (or JSON_ARRAYAGG) implementaton
+    where the Unique tree or the ORDER BY tree may store the null values,
+    in such case we also store the null nyntes inside each node of the tree.
+
+*/
+
+uint Item_func_group_concat::get_null_bytes()
+{
+  return skip_nulls() ? 0 : table->s->null_bytes;
 }
 
 

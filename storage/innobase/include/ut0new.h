@@ -148,6 +148,8 @@ InnoDB:
 /** Maximum number of retries to allocate memory. */
 extern const size_t	alloc_max_retries;
 
+constexpr uint32_t INVALID_FILENAME_HASH = 0xFFFFFFFFU;
+
 /** Keys for registering allocations with performance schema.
 Pointers to these variables are supplied to PFS code via the pfs_info[]
 array and the PFS code initializes them via PSI_MEMORY_CALL(register_memory)().
@@ -293,7 +295,7 @@ public:
 		     )
 	{
 #ifdef UNIV_PFS_MEMORY
-		const PSI_memory_key other_key = other.get_mem_key(0);
+		const PSI_memory_key other_key = other.get_mem_key();
 
 		m_key = (other_key != mem_key_std)
 			? other_key
@@ -688,13 +690,13 @@ public:
 	@return performance schema key */
 	PSI_memory_key
 	get_mem_key(
-		uint32_t filename_hash) const
+		uint32_t filename_hash = INVALID_FILENAME_HASH) const
 	{
 		if (m_key != PSI_NOT_INSTRUMENTED) {
 			return(m_key);
 		}
 
-		if (filename_hash == 0) {
+		if (filename_hash == INVALID_FILENAME_HASH) {
 			return(mem_key_std);
 		}
 		const PSI_memory_key	key = ut_new_get_key_by_file(filename_hash);
@@ -819,19 +821,194 @@ static constexpr const char* ut_basename(const char *filename)
   return basename_helper(filename, filename);
 }
 
-/** Compute djb2 hash for a string. Stop at '.' , or '\0' */
-constexpr uint32_t ut_filename_hash(const char* s, uint32_t h = 5381)
+static constexpr bool strequal_ignore_dot(const char* a, const char* b)
 {
-  return *s == 0 || *s == '.' ? h :
-    ut_filename_hash(s + 1, 33 * h  + (uint8_t)*s);
+  return  *a == 0 || *a == '.' ? (*b == 0 || *b == '.')
+    : *a == *b ? strequal_ignore_dot(a+1, b+1) : false;
 }
 
-/* Force constexpr to be evaluated at compile time.*/
-#define FORCE_CONSTEXPR(expr)[&]() \
-{ static constexpr auto x = (expr); return x; }()
+constexpr const char* auto_event_names[] =
+{
+	"btr0btr",
+	"btr0bulk",
+	"btr0cur",
+	"btr0defragment",
+	"btr0pcur",
+	"btr0sea",
+	"btr0types",
+	"buf0buddy",
+	"buf0buf",
+	"buf0checksum",
+	"buf0dblwr",
+	"buf0dump",
+	"buf0flu",
+	"buf0lru",
+	"buf0rea",
+	"buf0types",
+	"data0data",
+	"data0type",
+	"data0types",
+	"db0err",
+	"dict0boot",
+	"dict0crea",
+	"dict0defrag_bg",
+	"dict0dict",
+	"dict0load",
+	"dict0mem",
+	"dict0pagecompress",
+	"dict0priv",
+	"dict0stats",
+	"dict0stats_bg",
+	"dict0types",
+	"dyn0buf",
+	"dyn0types",
+	"eval0eval",
+	"eval0proc",
+	"fil0crypt",
+	"fil0fil",
+	"fil0pagecompress",
+	"fsp0file",
+	"fsp0fsp",
+	"fsp0space",
+	"fsp0sysspace",
+	"fsp0types",
+	"fts0ast",
+	"fts0blex",
+	"fts0config",
+	"fts0fts",
+	"fts0opt",
+	"fts0pars",
+	"fts0plugin",
+	"fts0priv",
+	"fts0que",
+	"fts0sql",
+	"fts0tlex",
+	"fts0tokenize",
+	"fts0types",
+	"fts0vlc",
+	"fut0fut",
+	"fut0lst",
+	"gis0geo",
+	"gis0rtree",
+	"gis0sea",
+	"gis0type",
+	"ha0ha",
+	"ha0storage",
+	"ha_innodb",
+	"ha_prototypes",
+	"handler0alter",
+	"hash0hash",
+	"i_s",
+	"ib0mutex",
+	"ibuf0ibuf",
+	"ibuf0types",
+	"lexyy",
+	"lock0iter",
+	"lock0lock",
+	"lock0prdt",
+	"lock0priv",
+	"lock0types",
+	"lock0wait",
+	"log0crypt",
+	"log0log",
+	"log0recv",
+	"log0sync",
+	"log0types",
+	"mach0data",
+	"mem0mem",
+	"mtr0log",
+	"mtr0mtr",
+	"mtr0types",
+	"os0api",
+	"os0event",
+	"os0file",
+	"os0proc",
+	"os0thread",
+	"page0cur",
+	"page0page",
+	"page0types",
+	"page0zip",
+	"pars0grm",
+	"pars0lex",
+	"pars0opt",
+	"pars0pars",
+	"pars0sym",
+	"pars0types",
+	"que0que",
+	"que0types",
+	"read0read",
+	"read0types",
+	"rem0cmp",
+	"rem0rec",
+	"rem0types",
+	"row0ext",
+	"row0ftsort",
+	"row0import",
+	"row0ins",
+	"row0log",
+	"row0merge",
+	"row0mysql",
+	"row0purge",
+	"row0quiesce",
+	"row0row",
+	"row0sel",
+	"row0types",
+	"row0uins",
+	"row0umod",
+	"row0undo",
+	"row0upd",
+	"row0vers",
+	"srv0conc",
+	"srv0mon",
+	"srv0srv",
+	"srv0start",
+	"sync0arr",
+	"sync0debug",
+	"sync0policy",
+	"sync0rw",
+	"sync0sync",
+	"sync0types",
+	"trx0i_s",
+	"trx0purge",
+	"trx0rec",
+	"trx0roll",
+	"trx0rseg",
+	"trx0sys",
+	"trx0trx",
+	"trx0types",
+	"trx0undo",
+	"trx0xa",
+	"ut0byte",
+	"ut0counter",
+	"ut0crc32",
+	"ut0dbg",
+	"ut0list",
+	"ut0lst",
+	"ut0mem",
+	"ut0mutex",
+	"ut0new",
+	"ut0pool",
+	"ut0rbt",
+	"ut0rnd",
+	"ut0sort",
+	"ut0stage",
+	"ut0ut",
+	"ut0vec",
+	"ut0wqueue"
+};
 
-#define FILENAME_HASH FORCE_CONSTEXPR(ut_filename_hash(ut_basename(__FILE__)))
 
+constexpr uint32_t lookup_auto_event_name(const char* x, int idx=0)
+{
+  return idx == UT_ARR_SIZE(auto_event_names)? INVALID_FILENAME_HASH :
+    strequal_ignore_dot(x, auto_event_names[idx])?idx:
+    lookup_auto_event_name(x, idx+1);
+}
+
+#define FILENAME_HASH lookup_auto_event_name(ut_basename(__FILE__))
+
+static_assert(FILENAME_HASH != INVALID_FILENAME_HASH,
+  "Update auto_event_names with basename of the source/header file");
 
 /** Allocate, trace the allocation and construct an object.
 Use this macro instead of 'new' within InnoDB.

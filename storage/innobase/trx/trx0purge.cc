@@ -696,6 +696,7 @@ not_free:
 		const ulint size = SRV_UNDO_TABLESPACE_SIZE_IN_PAGES;
 		mtr.start();
 		mtr_x_lock_space(purge_sys.truncate.current, &mtr);
+		mtr.set_named_space(purge_sys.truncate.current);
 		mtr.trim_pages(page_id_t(space.id, size));
 		fsp_header_init(purge_sys.truncate.current, size, &mtr);
 		mutex_enter(&fil_system.mutex);

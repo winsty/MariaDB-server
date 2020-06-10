@@ -1038,6 +1038,7 @@ fil_space_free_low(
 	rw_lock_free(&space->latch);
 	fil_space_destroy_crypt_data(&space->crypt_data);
 
+	space->~fil_space_t();
 	ut_free(space->name);
 	ut_free(space);
 }
@@ -1130,7 +1131,7 @@ fil_space_create(
 		return(NULL);
 	}
 
-	space = static_cast<fil_space_t*>(ut_zalloc_nokey(sizeof(*space)));
+	space= new (ut_zalloc_nokey(sizeof(*space))) fil_space_t;
 
 	space->id = id;
 	space->name = mem_strdup(name);
